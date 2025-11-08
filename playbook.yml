@@ -1,0 +1,119 @@
+---
+- name: Configure Server and Deploy Nginx Container
+  hosts: web
+  become: yes
+  gather_facts: yes
+  vars:
+    # Set the Python interpreter for Ansible
+    ansible_python_interpreter: /usr/bin/python3.8
+
+  tasks:
+
+    #################################################################
+    # ASSIGNMENT PART 2: CONFIGURATION MANAGEMENT
+    # Automate the server configuration (installing Docker).
+    #################################################################
+
+    # Install Docker using the amazon-linux-extras repository
+    - name: Install Docker
+      ansible.builtin.shell: "amazon-linux-extras install docker -y"
+      args:
+        creates: /usr/bin/docker
+      changed_when: false
+
+    # Ensure the Docker service is running and enabled on boot
+    - name: Start and enable Docker service
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: yes
+
+    # Add ec2-user to the docker group to run docker commands
+    - name: Add ec2-user to Docker group
+      ansible.builtin.user:
+        name: ec2-user
+        groups: docker
+        append: yes
+
+    #################################################################
+    # ASSIGNMENT PART 3: DOCKER CONTAINER DEPLOYMENT (PREP)
+    # Install Python libraries needed for Ansible's Docker modules.
+    #################################################################
+
+    # Install pip dependencies (docker, requests)
+    - name: Install Python dependencies for Docker modules
+      ansible.builtin.pip:
+        name:
+          - "urllib3<2.0"    
+          - "requests<2.30"  
+          - docker
+          - PyYAML
+        executable: /usr/bin/pip3.8
+        state: present
+        extra_args: --force-reinstall
+
+    #################################################################
+    # ASSIGNMENT PART 3: DOCKER CONTAINER DEPLOYMENT (EXECUTION)
+    # Automate the deployment of the Docker container.
+    #################################################################
+
+    # Create the directory on the host to hold website content
+    - name: Create Nginx web content directory
+      ansible.builtin.file:
+        path: /home/ec2-user/nginx/html
+        state: directory
+        owner: ec2-user
+        group: ec2-user
+        mode: '0755'
+
+    - name: Create Nginx web content directory
+      ansible.builtin.file:
+        path: /usr/share/nginx/html
+        state: directory
+        owner: ec2-user
+        group: ec2-user
+        mode: '0755'
+
+    # Copy the local 'html' folder to the remote server
+    - name: Copy local HTML files to host
+      ansible.builtin.copy:
+        src: html/
+        dest: /home/ec2-user/nginx/html/
+        owner: ec2-user
+        group: ec2-user
+        mode: '0644'
+
+    # Pull the latest version of the Nginx image
+    - name: Pull latest Nginx image
+      community.docker.docker_image:
+        name: nginx:latest
+        source: pull
+
+    # Ensure any old version of the container is stopped and removed
+    - name: Stop and remove existing container
+      community.docker.docker_container:
+        name: nginx_web
+        state: absent
+
+    # Run the Nginx container
+    - name: Run Nginx container with mounted HTML directory
+      community.docker.docker_container:
+        name: nginx_web
+        image: nginx:latest
+        state: started
+        restart_policy: always
+        ports:
+          - "80:80"
+        volumes:
+          - /home/ec2-user/nginx/html:/usr/share/nginx/html
+
+    #################################################################
+    # FINAL STEP: REPORT SUCCESS
+    #################################################################
+
+    # Print a success message with the server's IP address
+    - name: Display deployment success message
+      ansible.builtin.debug:
+        msg: >
+          Nginx deployed successfully!
+          You can access the server at: http://{{ ansible_default_ipv4.address }}

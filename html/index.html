@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deployment Successful</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .bg-image {
+            background-image: url('https://img.freepik.com/premium-photo/silhouette-man-standing-holding-flag_50039-1879.jpg?semt=ais_hybrid&w=740&q=80');
+            background-size: cover;
+            background-position: center;
+        }
+        /* Fallback for image load error */
+        img[src="https://img.freepik.com/premium-photo/silhouette-man-standing-holding-flag_50039-1879.jpg?semt=ais_hybrid&w=740&q=80"] {
+            display: none; /* Hide broken image icon if it fails */
+        }
+    </style>
+</head>
+<body class="bg-image min-h-screen flex items-center justify-center p-4">
+    <!-- Overlay -->
+    <div class="absolute inset-0 bg-gray-900 opacity-80"></div>
+
+    <!-- Content Card -->
+    <div class="relative z-10 w-full max-w-2xl bg-white/10 backdrop-blur-md rounded-2xl shadow-xl text-white p-8 md:p-12 text-center">
+        
+        <div class="mb-6">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-20 w-20 text-green-400 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+        </div>
+
+        <h1 class="text-4xl md:text-5xl font-bold text-white mb-4">
+            Deployment Successful
+        </h1>
+        
+        <p class="text-xl text-gray-200 mb-8">
+            This application was deployed automatically to AWS.
+        </p>
+
+        <div class="bg-white/10 rounded-lg p-6">
+            <h2 class="text-2xl font-semibold mb-4 text-green-400">Project Details</h2>
+            <p class="text-lg text-gray-300 mb-6">
+                Module: B9IS121 Network Systems and Administration
+            </p>
+
+            <h3 class="text-xl font-semibold mb-4 text-gray-100">Technology Stack</h3>
+            <div class="flex flex-wrap justify-center gap-6">
+                
+                <!-- Terraform -->
+                <div class="flex flex-col items-center" title="Terraform">
+                    <!-- UPDATED to use your image -->
+                    <img src="assets/terraform.png" alt="Terraform Logo" class="h-10 w-10 object-contain">
+                    <span class="text-sm mt-1">Terraform</span>
+                </div>
+                
+                <!-- Ansible -->
+                <div class="flex flex-col items-center" title="Ansible">
+                    <!-- UPDATED to use your image -->
+                    <img src="assets/ansible.png" alt="Ansible Logo" class="h-10 w-10 object-contain">
+                    <span class="text-sm mt-1">Ansible</span>
+                </div>
+
+                <!-- Docker -->
+                <div class="flex flex-col items-center" title="Docker">
+                    <!-- UPDATED to use your image -->
+                    <img src="assets/docker.png" alt="Docker Logo" class="h-10 w-10 object-contain">
+                    <span class="text-sm mt-1">Docker</span>
+                </div>
+
+                <!-- GitHub Actions -->
+                <div class="flex flex-col items-center" title="GitHub Actions">
+                    <!-- Kept original SVG as 'github.png' was blank -->
+                    <img src="assets/github.png" alt="GitHub Logo" class="h-10 w-10 object-contain">
+                    <span class="text-sm mt-1">GitHub Actions</span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Error handler for the background image -->
+    <img 
+        src="https://img.freepik.com/premium-photo/silhouette-man-standing-holding-flag_50039-1879.jpg?semt=ais_hybrid&w=740&q=80" 
+        onerror="document.body.style.backgroundColor='#111827'; document.body.classList.remove('bg-image');" 
+        class="hidden"
+        alt="Background image preloader"
+    />
+</body>
+</html>

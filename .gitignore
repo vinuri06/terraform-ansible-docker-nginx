@@ -1,0 +1,6 @@
+# Terraform state files
+*.tfstate
+*.tfstate.backup
+
+# Private SSH key
+Network.pem
