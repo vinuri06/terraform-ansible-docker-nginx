@@ -1,39 +1,31 @@
-terraform {
-  cloud {
-    organization = "YOUR_ORG_NAME_HERE" # <-- 1. Replace this with your TFC Org Name
-
-    workspaces {
-      name = "b9is121-autodeploy" # <-- 2. You will create a workspace with this name
-    }
-  }
-}
-
 /*
  * AWS Provider Configuration
+ * Specifies the region for all resources.
  */
 provider "aws" {
-  region = "eu-north-1"
+  region = "us-east-1"
 }
 
 /*
- * Deploys the main application server
+ * Deploys the main application server compute instance.
+ * This EC2 instance will host our application.
  */
 resource "aws_instance" "app_server" {
-  ami           = "ami-001db41e42e1ff69f"
+  # Using a standard Amazon Linux 2 AMI
+  ami           = "ami-0601422bf6afa8ac3"
   instance_type = "t3.micro"
-  key_name      = "Network"
-  
+  key_name      = "Network" # Assumes 'Network' key pair exists in us-east-1
+
+  # Attach the security group defined below
   vpc_security_group_ids = [aws_security_group.app_security_group.id]
 
-  # FIXED: Robust user_data script
+  # Initial boot script:
+  # 1. Update all packages
+  # 2. Install Python 3.8
+  # 3. Set python3.8 as the default 'python3'
+  # This prepares the instance for Ansible configuration.
   user_data = <<-EOF
               #!/bin/bash
-              # Wait for yum lock to be free
-              while fuser /var/run/yum.pid >/dev/null 2>&1 ; do
-                 echo "Waiting for yum lock to be released..."
-                 sleep 5
-              done
-              
               yum update -y
               amazon-linux-extras install -y python3.8
               alternatives --set python3 /usr/bin/python3.8
@@ -45,13 +37,15 @@ resource "aws_instance" "app_server" {
 }
 
 /*
- * Defines network access rules
+ * Defines network access rules for the application server.
+ * A security group acts as a virtual firewall.
  */
 resource "aws_security_group" "app_security_group" {
-  name        = "app_server_sg"
+  name        = "app_server_sg_"
   description = "Controls access for the ApplicationInstance"
 
-  # Allow SSH
+  # Ingress Rule: Allow SSH from any IP
+  # Required for remote administration (e.g., Ansible)
   ingress {
     description = "Allow SSH"
     from_port   = 22
@@ -60,7 +54,8 @@ resource "aws_security_group" "app_security_group" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # Allow HTTP
+  # Ingress Rule: Allow HTTP from any IP
+  # Allows public access to the web application
   ingress {
     description = "Allow HTTP"
     from_port   = 80
@@ -69,7 +64,8 @@ resource "aws_security_group" "app_security_group" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # Allow all outbound
+  # Egress Rule: Allow all outbound connections
+  # Lets the server download updates, pull docker images, etc.
   egress {
     from_port   = 0
     to_port     = 0
@@ -84,17 +80,22 @@ resource "aws_security_group" "app_security_group" {
 
 /*
  * Outputs
+ * Displays key information after 'terraform apply'.
  */
+
+# The public IP address for connecting to the server (e.g., SSH or HTTP)
 output "server_public_ip" {
   description = "Public IP of the App Server"
   value       = aws_instance.app_server.public_ip
 }
 
+# The unique ID of the created compute instance
 output "server_instance_id" {
   description = "Instance ID of the App Server"
   value       = aws_instance.app_server.id
 }
 
+# The unique ID of the created security group
 output "app_server_sg_id" {
   description = "ID of the App Server Security Group"
   value       = aws_security_group.app_security_group.id
