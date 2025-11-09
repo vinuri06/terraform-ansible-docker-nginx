@@ -1,25 +1,31 @@
 name: Automated AWS Deployment Pipeline
 
+# Controls when the action will run
 on:
+  # Triggers the workflow on push events but only for the "main" branch
   push:
     branches:
       - main
+  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  # A single job in this workflow called "provision-and-configure"
   provision-and-configure:
     name: Provision and Configure Server
     runs-on: ubuntu-latest
 
     steps:
-      # Get the source code from the repository
+      # --- Task 1: Get Repository Code ---
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - name: Fetch source code
         uses: actions/checkout@v4
 
-      # Authenticate the GitHub runner with AWS
+      # --- Task 2: AWS Authentication ---
+      # Authenticates the runner to AWS using GitHub Secrets
       - name: Authenticate to AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -27,76 +33,75 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: eu-north-1
 
-      # Install Terraform CLI
+      # --- Task 3: Setup Terraform ---
+      # Installs the Terraform CLI on the runner
       - name: Install Terraform CLI
         uses: hashicorp/setup-terraform@v3
 
-      # Check if Terraform state file already exists
-      - name: Check for Terraform state file
-        id: check_state
-        run: |
-          if [ -f terraform.tfstate ]; then
-            echo "STATE_EXISTS=true" >> $GITHUB_ENV
-          else
-            echo "STATE_EXISTS=false" >> $GITHUB_ENV
-          fi
-
-      # Initialize Terraform if it's the first deployment
-      - name: Initialize Terraform
-        if: env.STATE_EXISTS == 'false'
+      # --- Task 4: Initialize Terraform (Assignment Part 1) ---
+      # Runs 'terraform init' to prepare the working directory
+      - name: Initialize Terraform Backend
+        id: tf-init
         run: terraform init
 
-      # Apply Terraform to create infrastructure (only first time)
-      - name: Apply Terraform (First Deploy)
-        if: env.STATE_EXISTS == 'false'
+      # --- Task 5: Apply Terraform (Assignment Part 1) ---
+      # Runs 'terraform apply' to provision the EC2 instance and Security Group
+      - name: Provision Infrastructure
+        id: tf-apply
         run: terraform apply -auto-approve
 
-      # Get the EC2 public IP from Terraform output
-      - name: Read EC2 Public IP
+      # --- Task 6: Extract Server IP Address ---
+      # Queries the Terraform state for the 'server_public_ip' output
+      - name: Read Dynamic IP from Terraform Output
         id: get_ip
         run: |
-          if [ "${{ env.STATE_EXISTS }}" = "true" ]; then
-            echo "Using existing Terraform state..."
-          else
-            echo "New Terraform deployment..."
-          fi
           SERVER_IP=$(terraform output -raw server_public_ip)
           echo "SERVER_IP=$SERVER_IP" >> $GITHUB_ENV
+          echo "Infrastructure provisioned. Server IP is: $SERVER_IP"
 
-      # Cache Terraform state file for future runs
-      - name: Cache Terraform State
-        uses: actions/cache@v4
-        with:
-          path: terraform.tfstate
-          key: terraform-state-${{ github.ref }}
-
-      # Install Ansible on the runner
-      - name: Install Ansible
+      # --- Task 7: Install Ansible ---
+      # Installs Python and the Ansible package on the runner
+      - name: Install Ansible on Runner
         run: |
           sudo apt update -y
           sudo apt install -y python3-pip
           pip3 install ansible
 
-      # Create SSH key file and Ansible inventory
-      - name: Generate Ansible Inventory
+      # --- Task 8: Create Ansible Connection Files ---
+      # Generates the SSH key and inventory file needed by Ansible
+      - name: Generate Ansible Inventory and SSH Key
         run: |
+          # Create the .pem file from the GitHub secret
           echo "${{ secrets.EC2_SSH_KEY }}" > deploy_key.pem
           chmod 400 deploy_key.pem
+
+          # Create the inventory.ini file dynamically
           echo "[web]" > inventory.ini
           echo "${{ env.SERVER_IP }} ansible_user=ec2-user ansible_ssh_private_key_file=./deploy_key.pem" >> inventory.ini
 
-      # Run Ansible playbook to update or deploy HTML content
+          echo "Inventory file created for host:"
+          cat inventory.ini
+
+      # --- Task 9: Run Configuration (Assignment Part 2 & 3) ---
+      # Executes the main playbook to configure the remote server
       - name: Execute Ansible Playbook
         env:
+          # Skips the SSH host key verification prompt
           ANSIBLE_HOST_KEY_CHECKING: False
         run: |
+          # Pause to allow the new EC2 instance to boot and open port 22
+          echo "Verifying SSH connection readiness..."
           ansible -i inventory.ini web -m wait_for \
             -a "port=22 host=${{ env.SERVER_IP }} timeout=300" \
             --connection=local
+
+          # Run the main configuration
+          echo "SSH ready. Running main playbook..."
           ansible-playbook -i inventory.ini playbook.yml
 
-      # Print the final result
+      # --- Task 10: Final Deployment Notice ---
+      # Prints the final URL to the job log
       - name: Post-Deployment Summary
         run: |
-          echo "Deployment complete."
-          echo "Access your web app at: http://${{ env.SERVER_IP }}"
+          echo "Pipeline finished successfully."
+          echo "Access your web application at: http://${{ env.SERVER_IP }}"
