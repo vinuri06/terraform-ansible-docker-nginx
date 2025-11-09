@@ -49,15 +49,6 @@ jobs:
             echo "No Terraform state file found. Infrastructure will be created."
           fi
 
-      # --- Task 4: Initialize Terraform ---
-      - name: Initialize Terraform Backend
-        if: env.state_exists == 'false'
-        run: terraform init
-
-      # --- Task 5: Apply Terraform ---
-      - name: Provision Infrastructure
-        if: env.state_exists == 'false'
-        run: terraform apply -auto-approve
 
 
 
