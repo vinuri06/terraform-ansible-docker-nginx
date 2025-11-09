@@ -1,9 +1,20 @@
 /*
+ * Terraform Backend Configuration
+ * Stores the Terraform state file locally.
+ * This prevents Terraform from asking for a cloud token (HCP login).
+ */
+terraform {
+  backend "local" {
+    path = "terraform.tfstate"
+  }
+}
+
+/*
  * AWS Provider Configuration
  * Specifies the region for all resources.
  */
 provider "aws" {
-  region = "us-east-1"
+  region = "eu-north-1"
 }
 
 /*
@@ -44,8 +55,6 @@ resource "aws_security_group" "app_security_group" {
   name        = "app_server_sg_"
   description = "Controls access for the ApplicationInstance"
 
-  # Ingress Rule: Allow SSH from any IP
-  # Required for remote administration (e.g., Ansible)
   ingress {
     description = "Allow SSH"
     from_port   = 22
@@ -54,8 +63,6 @@ resource "aws_security_group" "app_security_group" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # Ingress Rule: Allow HTTP from any IP
-  # Allows public access to the web application
   ingress {
     description = "Allow HTTP"
     from_port   = 80
@@ -64,8 +71,6 @@ resource "aws_security_group" "app_security_group" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # Egress Rule: Allow all outbound connections
-  # Lets the server download updates, pull docker images, etc.
   egress {
     from_port   = 0
     to_port     = 0
@@ -83,19 +88,16 @@ resource "aws_security_group" "app_security_group" {
  * Displays key information after 'terraform apply'.
  */
 
-# The public IP address for connecting to the server (e.g., SSH or HTTP)
 output "server_public_ip" {
   description = "Public IP of the App Server"
   value       = aws_instance.app_server.public_ip
 }
 
-# The unique ID of the created compute instance
 output "server_instance_id" {
   description = "Instance ID of the App Server"
   value       = aws_instance.app_server.id
 }
 
-# The unique ID of the created security group
 output "app_server_sg_id" {
   description = "ID of the App Server Security Group"
   value       = aws_security_group.app_security_group.id
