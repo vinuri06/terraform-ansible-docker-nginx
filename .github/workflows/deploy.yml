@@ -1,109 +1,104 @@
-name: Automated AWS Deployment Pipeline
+name: Smart AWS Deployment
 
-# Controls when the action will run
 on:
-  # Triggers the workflow on push events but only for the "main" branch
   push:
     branches:
       - main
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
 permissions:
   contents: read
+  id-token: write
+  actions: write  # allow updating secrets
 
 jobs:
-  # A single job in this workflow called "provision-and-configure"
-  provision-and-configure:
-    name: Provision and Configure Server
+  deploy:
     runs-on: ubuntu-latest
+    name: Terraform Once, Ansible Always
 
     steps:
-      # --- Task 1: Get Repository Code ---
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - name: Fetch source code
+      # 1️⃣ Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # --- Task 2: AWS Authentication ---
-      # Authenticates the runner to AWS using GitHub Secrets
-      - name: Authenticate to AWS
+      # 2️⃣ AWS Auth
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: eu-north-1
 
-      # --- Task 3: Setup Terraform ---
-      # Installs the Terraform CLI on the runner
-      - name: Install Terraform CLI
-        uses: hashicorp/setup-terraform@v3
-
-      - name: Check if Terraform state exists
-        id: check_state
+      # 3️⃣ Install dependencies
+      - name: Setup Terraform & Ansible
         run: |
-          if [ -f terraform.tfstate ]; then
-            echo "state_exists=true" >> $GITHUB_ENV
-            echo "Terraform state file found."
-          else
-            echo "state_exists=false" >> $GITHUB_ENV
-            echo "No Terraform state file found. Infrastructure will be created."
-          fi
+          sudo apt update -y
+          sudo apt install -y python3-pip jq curl
+          pip3 install "ansible>=9,<11"
+          ansible-galaxy collection install community.docker
+          curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
+          sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
+          sudo apt install -y terraform
 
+      # 4️⃣ Check Secret Flag
+      - name: Check Terraform Deployment Flag
+        id: check_flag
+        run: |
+          echo "INFRA_CREATED=${{ secrets.INFRA_CREATED }}" >> $GITHUB_ENV
+          echo "EC2_PUBLIC_IP=${{ secrets.EC2_PUBLIC_IP }}" >> $GITHUB_ENV
+          echo "Infra Created: ${{ secrets.INFRA_CREATED }}"
+          echo "Saved IP: ${{ secrets.EC2_PUBLIC_IP }}"
 
+      # 5️⃣ Conditional Terraform Run
+      - name: Initialize Terraform
+        if: env.INFRA_CREATED == 'false'
+        run: terraform init
 
+      - name: Apply Terraform (First Run Only)
+        if: env.INFRA_CREATED == 'false'
+        run: terraform apply -auto-approve
 
-      # --- Task 6: Extract Server IP Address ---
-      # Queries the Terraform state for the 'server_public_ip' output
-      - name: Read Dynamic IP from Terraform Output
+      # 6️⃣ Get EC2 IP (first time)
+      - name: Fetch Terraform Output and Update Secrets
+        if: env.INFRA_CREATED == 'false'
         id: get_ip
         run: |
           SERVER_IP=$(terraform output -raw server_public_ip)
           echo "SERVER_IP=$SERVER_IP" >> $GITHUB_ENV
-          echo "Infrastructure provisioned. Server IP is: $SERVER_IP"
+          echo "Server IP: $SERVER_IP"
 
-      # --- Task 7: Install Ansible ---
-      # Installs Python and the Ansible package on the runner
-      - name: Install Ansible on Runner
-        run: |
-          sudo apt update -y
-          sudo apt install -y python3-pip
-          pip3 install ansible
+          echo "Installing GitHub CLI..."
+          sudo apt install -y gh
+          echo "${{ secrets.PERSONAL_TOKEN }}" | gh auth login --with-token
 
-      # --- Task 8: Create Ansible Connection Files ---
-      # Generates the SSH key and inventory file needed by Ansible
-      - name: Generate Ansible Inventory and SSH Key
+          echo "Updating repository secrets..."
+          gh secret set INFRA_CREATED --body "true"
+          gh secret set EC2_PUBLIC_IP --body "$SERVER_IP"
+
+
+      # 7️⃣ Reuse EC2 IP (next runs)
+      - name: Reuse Saved EC2 IP
+        if: env.INFRA_CREATED == 'true'
         run: |
-          # Create the .pem file from the GitHub secret
+          echo "Reusing existing EC2 IP: ${{ secrets.EC2_PUBLIC_IP }}"
+          echo "SERVER_IP=${{ secrets.EC2_PUBLIC_IP }}" >> $GITHUB_ENV
+
+      # 8️⃣ Create Ansible Inventory
+      - name: Create Ansible Inventory
+        run: |
           echo "${{ secrets.EC2_SSH_KEY }}" > deploy_key.pem
           chmod 400 deploy_key.pem
-
-          # Create the inventory.ini file dynamically
           echo "[web]" > inventory.ini
           echo "${{ env.SERVER_IP }} ansible_user=ec2-user ansible_ssh_private_key_file=./deploy_key.pem" >> inventory.ini
-
-          echo "Inventory file created for host:"
           cat inventory.ini
 
-      # --- Task 9: Run Configuration (Assignment Part 2 & 3) ---
-      # Executes the main playbook to configure the remote server
-      - name: Execute Ansible Playbook
+      # 9️⃣ Run Ansible
+      - name: Configure and Deploy with Ansible
         env:
-          # Skips the SSH host key verification prompt
-          ANSIBLE_HOST_KEY_CHECKING: False
-        run: |
-          # Pause to allow the new EC2 instance to boot and open port 22
-          echo "Verifying SSH connection readiness..."
-          ansible -i inventory.ini web -m wait_for \
-            -a "port=22 host=${{ env.SERVER_IP }} timeout=300" \
-            --connection=local
+          ANSIBLE_HOST_KEY_CHECKING: "False"
+        run: ansible-playbook -i inventory.ini playbook.yml
 
-          # Run the main configuration
-          echo "SSH ready. Running main playbook..."
-          ansible-playbook -i inventory.ini playbook.yml
-
-      # --- Task 10: Final Deployment Notice ---
-      # Prints the final URL to the job log
-      - name: Post-Deployment Summary
+      # 🔟 Final Log
+      - name: Deployment Summary
         run: |
-          echo "Pipeline finished successfully."
-          echo "Access your web application at: http://${{ env.SERVER_IP }}"
+          echo "✅ Done! Access app at: http://${{ env.SERVER_IP }}"
