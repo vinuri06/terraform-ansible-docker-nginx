@@ -38,16 +38,16 @@ jobs:
       - name: Install Terraform CLI
         uses: hashicorp/setup-terraform@v3
 
-      # --- Task 4: Initialize Terraform (Assignment Part 1) ---
-      # Runs 'terraform init' to prepare the working directory
+      # --- Task 4: Initialize Terraform (only if not done) ---
       - name: Initialize Terraform Backend
         id: tf-init
+        if: ${{ !exists('terraform.tfstate') }}
         run: terraform init
 
-      # --- Task 5: Apply Terraform (Assignment Part 1) ---
-      # Runs 'terraform apply' to provision the EC2 instance and Security Group
+      # --- Task 5: Apply Terraform (only if not done) ---
       - name: Provision Infrastructure
         id: tf-apply
+        if: ${{ !exists('terraform.tfstate') }}
         run: terraform apply -auto-approve
 
       # --- Task 6: Extract Server IP Address ---
