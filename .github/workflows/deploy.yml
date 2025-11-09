@@ -38,17 +38,28 @@ jobs:
       - name: Install Terraform CLI
         uses: hashicorp/setup-terraform@v3
 
-      # --- Task 4: Initialize Terraform (only if not done) ---
+      - name: Check if Terraform state exists
+        id: check_state
+        run: |
+          if [ -f terraform.tfstate ]; then
+            echo "state_exists=true" >> $GITHUB_ENV
+            echo "Terraform state file found."
+          else
+            echo "state_exists=false" >> $GITHUB_ENV
+            echo "No Terraform state file found. Infrastructure will be created."
+          fi
+
+      # --- Task 4: Initialize Terraform ---
       - name: Initialize Terraform Backend
-        id: tf-init
-        if: ${{ !exists('terraform.tfstate') }}
+        if: env.state_exists == 'false'
         run: terraform init
 
-      # --- Task 5: Apply Terraform (only if not done) ---
+      # --- Task 5: Apply Terraform ---
       - name: Provision Infrastructure
-        id: tf-apply
-        if: ${{ !exists('terraform.tfstate') }}
+        if: env.state_exists == 'false'
         run: terraform apply -auto-approve
+
+
 
       # --- Task 6: Extract Server IP Address ---
       # Queries the Terraform state for the 'server_public_ip' output
